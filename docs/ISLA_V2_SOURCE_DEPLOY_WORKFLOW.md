@@ -31,6 +31,12 @@ The helper supports:
 - post-deploy `isla-v2-preflight` and `isla-check`
 - explicit refusal when invoked outside `/home/ai/ai-agents-src`
 
+Parity verification helper:
+
+- Script: `/home/ai/ai-agents-src/deploy/verify-runtime-parity.sh`
+- Uses the same checked-in exclude file as deployment
+- Prints `PARITY_PASS` or `PARITY_FAIL`
+
 ## Standard Workflow
 
 1. Make changes in source only.
@@ -119,6 +125,38 @@ The checked-in exclude file keeps runtime-only state out of source deployments, 
 - procedure lock files
 
 ## Verification After Deploy
+
+### Source/runtime parity
+
+```bash
+cd /home/ai/ai-agents-src
+deploy/verify-runtime-parity.sh
+```
+
+Expected pass result:
+
+```text
+=== parity config ===
+source: /home/ai/ai-agents-src
+runtime: /home/ai/ai-agents
+exclude: /home/ai/ai-agents-src/deploy/runtime-sync.exclude
+
+PARITY_PASS: source and runtime match for source-controlled files
+```
+
+Expected fail result:
+
+```text
+PARITY_FAIL: source and runtime differ for source-controlled files
+```
+
+If it fails, review the listed diff and determine whether:
+
+- runtime was hotfixed directly
+- source changes were not deployed yet
+- the exclude file needs explicit review
+
+### Runtime health
 
 ```bash
 /home/ai/bin/isla-v2-preflight

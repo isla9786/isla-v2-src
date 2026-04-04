@@ -5,6 +5,7 @@ import subprocess
 ROOT = Path("/home/ai/ai-agents-src")
 EXCLUDE_FILE = ROOT / "deploy" / "runtime-sync.exclude"
 SCRIPT_FILE = ROOT / "deploy" / "sync-to-runtime.sh"
+PARITY_SCRIPT_FILE = ROOT / "deploy" / "verify-runtime-parity.sh"
 
 
 def test_deploy_exclude_contains_runtime_only_paths():
@@ -49,3 +50,27 @@ def test_deploy_script_refuses_invocation_outside_source_repo():
     assert result.returncode != 0
     combined = result.stdout + result.stderr
     assert "SYNC_FAIL: run this helper from /home/ai/ai-agents-src or a subdirectory" in combined
+
+
+def test_parity_script_uses_checked_in_exclude_and_pass_fail_output():
+    body = PARITY_SCRIPT_FILE.read_text()
+    assert 'CURRENT_DIR="$(pwd -P)"' in body
+    assert 'EXCLUDE_FILE="$SOURCE_ROOT/deploy/runtime-sync.exclude"' in body
+    assert 'run this helper from $SOURCE_ROOT or a subdirectory' in body
+    assert '=== parity config ===' in body
+    assert '=== parity diff ===' in body
+    assert 'PARITY_PASS: source and runtime match for source-controlled files' in body
+    assert 'PARITY_FAIL:' in body
+    assert 'rsync -rcn --delete-delay --itemize-changes' in body
+
+
+def test_parity_script_refuses_invocation_outside_source_repo():
+    result = subprocess.run(
+        ["bash", "-lc", "cd /home/ai && /home/ai/ai-agents-src/deploy/verify-runtime-parity.sh"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "PARITY_FAIL: run this helper from /home/ai/ai-agents-src or a subdirectory" in combined
