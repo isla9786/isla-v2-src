@@ -3,9 +3,12 @@ import subprocess
 
 
 ROOT = Path("/home/ai/ai-agents-src")
+GITIGNORE_FILE = ROOT / ".gitignore"
 EXCLUDE_FILE = ROOT / "deploy" / "runtime-sync.exclude"
 SCRIPT_FILE = ROOT / "deploy" / "sync-to-runtime.sh"
 PARITY_SCRIPT_FILE = ROOT / "deploy" / "verify-runtime-parity.sh"
+RELEASE_GATE_FILE = ROOT / "scripts" / "release_gate.py"
+MAKEFILE = ROOT / "Makefile"
 
 
 def test_deploy_exclude_contains_runtime_only_paths():
@@ -26,6 +29,12 @@ def test_deploy_exclude_contains_runtime_only_paths():
         assert line in body
 
 
+def test_gitignore_covers_runtime_git_only_paths():
+    body = GITIGNORE_FILE.read_text()
+    for line in ["reports/", "deploy/runtime-revision.env", "downloads/", "venv2026/"]:
+        assert line in body
+
+
 def test_deploy_script_uses_checked_in_exclude_and_two_root_defaults():
     body = SCRIPT_FILE.read_text()
     assert 'CURRENT_DIR="$(pwd -P)"' in body
@@ -36,16 +45,36 @@ def test_deploy_script_uses_checked_in_exclude_and_two_root_defaults():
     assert 'REVISION_FILE_REL="deploy/runtime-revision.env"' in body
     assert 'print_sync_context "$MODE"' in body
     assert 'source git tree is dirty; commit or stash changes before deploying' in body
-    assert 'systemctl --user restart "$SERVICE_NAME"' in body
-    assert 'CHECK_OK: revision marker' in body
-    assert 'run_checked_step "runtime parity"' in body
-    assert 'run_checked_step "preflight"' in body
-    assert 'run_checked_step "stack-check"' in body
     assert 'SYNC_DRY_RUN_OK' in body
-    assert 'SYNC_APPLY_OK' in body
     assert 'SYNC_FAIL:' in body
-    assert '/home/ai/bin/isla-v2-preflight' in body
-    assert '/home/ai/bin/isla-check' in body
+    assert '=== release gate ===' in body
+    assert 'exec "$RUNTIME_PYTHON" "$SOURCE_ROOT/scripts/release_gate.py"' in body
+
+
+def test_release_entry_points_use_explicit_runtime_python():
+    makefile = MAKEFILE.read_text()
+    release_gate = RELEASE_GATE_FILE.read_text()
+
+    assert 'PYTHON := /home/ai/ai-agents/venv2026/bin/python' in makefile
+    assert 'release:' in makefile
+    assert '$(PYTHON) scripts/release_gate.py' in makefile
+    assert 'DEFAULT_SOURCE_ROOT = Path("/home/ai/ai-agents-src")' in release_gate
+    assert 'DEFAULT_RUNTIME_ROOT = Path("/home/ai/ai-agents")' in release_gate
+    assert 'DEFAULT_PYTHON_BIN = Path("/home/ai/ai-agents/venv2026/bin/python")' in release_gate
+    assert 'DEFAULT_SERVICE_NAME = "isla-v2-bot.service"' in release_gate
+
+
+def test_runtime_revision_helpers_prefer_git_identity_before_marker():
+    sync_body = SCRIPT_FILE.read_text()
+    parity_body = PARITY_SCRIPT_FILE.read_text()
+
+    sync_git = 'if git -C "$RUNTIME_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then'
+    sync_marker = 'if [[ -f "$REVISION_FILE" ]]; then'
+    parity_git = 'if git -C "$RUNTIME_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then'
+    parity_marker = 'if [[ -f "$REVISION_FILE" ]]; then'
+
+    assert sync_body.index(sync_git) < sync_body.index(sync_marker)
+    assert parity_body.index(parity_git) < parity_body.index(parity_marker)
 
 
 def test_deploy_script_refuses_invocation_outside_source_repo():

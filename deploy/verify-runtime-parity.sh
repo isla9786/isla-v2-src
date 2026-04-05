@@ -86,6 +86,15 @@ read_runtime_revision() {
   RUNTIME_TREE=""
   RUNTIME_DEPLOYED_AT_UTC=""
 
+  if git -C "$RUNTIME_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
+    RUNTIME_REVISION_SOURCE="git"
+    RUNTIME_BRANCH="$(git -C "$RUNTIME_ROOT" rev-parse --abbrev-ref HEAD)"
+    RUNTIME_COMMIT="$(git -C "$RUNTIME_ROOT" rev-parse HEAD)"
+    RUNTIME_TREE="$(git -C "$RUNTIME_ROOT" rev-parse HEAD^{tree})"
+    RUNTIME_DEPLOYED_AT_UTC="git-checkout"
+    return 0
+  fi
+
   if [[ -f "$REVISION_FILE" ]]; then
     # shellcheck disable=SC1090
     source "$REVISION_FILE"
@@ -94,15 +103,6 @@ read_runtime_revision() {
     RUNTIME_COMMIT="${DEPLOY_SOURCE_COMMIT:-}"
     RUNTIME_TREE="${DEPLOY_SOURCE_TREE:-}"
     RUNTIME_DEPLOYED_AT_UTC="${DEPLOYED_AT_UTC:-}"
-    return 0
-  fi
-
-  if git -C "$RUNTIME_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
-    RUNTIME_REVISION_SOURCE="git"
-    RUNTIME_BRANCH="$(git -C "$RUNTIME_ROOT" rev-parse --abbrev-ref HEAD)"
-    RUNTIME_COMMIT="$(git -C "$RUNTIME_ROOT" rev-parse HEAD)"
-    RUNTIME_TREE="$(git -C "$RUNTIME_ROOT" rev-parse HEAD^{tree})"
-    RUNTIME_DEPLOYED_AT_UTC="git-checkout"
   fi
 }
 

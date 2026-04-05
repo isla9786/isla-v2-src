@@ -3,7 +3,9 @@ __pycache__/
 *.py[cod]
 venv2026/
 downloads/
+reports/
 secrets/
+deploy/runtime-revision.env
 isla_v2/secrets/
 isla_v2/data/current-good-checksums.txt
 isla_v2/data/facts.db

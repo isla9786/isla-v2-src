@@ -89,6 +89,15 @@ read_runtime_revision() {
   RUNTIME_DEPLOYED_AT_UTC=""
   RUNTIME_BRANCH=""
 
+  if git -C "$RUNTIME_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
+    RUNTIME_REVISION_SOURCE="git"
+    RUNTIME_COMMIT="$(git -C "$RUNTIME_ROOT" rev-parse HEAD)"
+    RUNTIME_TREE="$(git -C "$RUNTIME_ROOT" rev-parse HEAD^{tree})"
+    RUNTIME_DEPLOYED_AT_UTC="git-checkout"
+    RUNTIME_BRANCH="$(git -C "$RUNTIME_ROOT" rev-parse --abbrev-ref HEAD)"
+    return 0
+  fi
+
   if [[ -f "$REVISION_FILE" ]]; then
     # shellcheck disable=SC1090
     source "$REVISION_FILE"
@@ -97,15 +106,6 @@ read_runtime_revision() {
     RUNTIME_TREE="${DEPLOY_SOURCE_TREE:-}"
     RUNTIME_DEPLOYED_AT_UTC="${DEPLOYED_AT_UTC:-}"
     RUNTIME_BRANCH="${DEPLOY_SOURCE_BRANCH:-}"
-    return 0
-  fi
-
-  if git -C "$RUNTIME_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
-    RUNTIME_REVISION_SOURCE="git"
-    RUNTIME_COMMIT="$(git -C "$RUNTIME_ROOT" rev-parse HEAD)"
-    RUNTIME_TREE="$(git -C "$RUNTIME_ROOT" rev-parse HEAD^{tree})"
-    RUNTIME_DEPLOYED_AT_UTC="git-checkout"
-    RUNTIME_BRANCH="$(git -C "$RUNTIME_ROOT" rev-parse --abbrev-ref HEAD)"
   fi
 }
 
@@ -316,24 +316,5 @@ if [[ "$BUNDLE_BEFORE_DEPLOY" -eq 1 ]]; then
 fi
 
 echo
-echo "=== rsync apply ==="
-rsync -av --delete-delay --itemize-changes \
-  --exclude-from="$EXCLUDE_FILE" \
-  "$SOURCE_ROOT"/ "$RUNTIME_ROOT"/
-
-echo
-echo "=== write runtime revision marker ==="
-write_revision_marker
-echo "CHECK_OK: revision marker"
-
-echo
-echo "=== restart service ==="
-systemctl --user restart "$SERVICE_NAME"
-wait_for_service_running
-
-run_checked_step "runtime parity" "$SOURCE_ROOT/deploy/verify-runtime-parity.sh"
-run_checked_step "preflight" /home/ai/bin/isla-v2-preflight
-run_checked_step "stack-check" /home/ai/bin/isla-check
-
-echo
-echo "SYNC_APPLY_OK: $SOURCE_COMMIT"
+echo "=== release gate ==="
+exec "$RUNTIME_PYTHON" "$SOURCE_ROOT/scripts/release_gate.py"
