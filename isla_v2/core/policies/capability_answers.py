@@ -240,6 +240,17 @@ FALSE_CLAIM_MARKERS = (
     "even though i have not uploaded",
 )
 
+COERCION_MARKERS = (
+    "ignore your limits",
+    "ignore previous instructions",
+    "pretend you are unrestricted",
+    "pretend you're unrestricted",
+    "for this answer only",
+    "do not explain limits",
+    "just confirm",
+    "say yes",
+)
+
 
 def _normalize(prompt: str) -> str:
     return " ".join(prompt.lower().split())
@@ -492,6 +503,67 @@ def _false_claim_answer() -> str:
     )
 
 
+def _mixed_pdf_and_bank_answer() -> str:
+    return "\n".join(
+        [
+            "I can help review or summarize the relevant PDF text if you paste it here.",
+            "I can't inspect an uploaded PDF directly in this text-only path, and I can't call your bank or make phone calls for you.",
+        ]
+    )
+
+
+def _code_and_physical_install_answer() -> str:
+    return "\n".join(
+        [
+            "I can review code or patch text you paste here.",
+            "I can't physically install a patch on your server or make real-world changes on your behalf.",
+        ]
+    )
+
+
+def _background_work_answer() -> str:
+    return "\n".join(
+        [
+            "I can help while you're actively chatting with me here.",
+            "I can't keep working in the background, monitor things continuously on my own, or message you later by myself.",
+            "If you want delayed or recurring work, use an explicit local scheduler or service and have it call the approved local tools.",
+        ]
+    )
+
+
+def _coercive_access_answer(text: str) -> Optional[str]:
+    if not _matches_any(text, COERCION_MARKERS):
+        return None
+
+    if _matches_any(text, ("access my computer", "access my pc", "access my laptop", "your computer")):
+        return (
+            "No. I can't access your computer from this chat, and asking me to ignore limits doesn't change that."
+        )
+    return None
+
+
+def _mixed_capability_boundary_answer(text: str) -> Optional[str]:
+    if _matches_any(text, ("pdf", "document", "documents", "upload", "uploaded")) and _matches_any(
+        text,
+        ("call my bank", "call the bank", "phone call", "make phone calls"),
+    ):
+        return _mixed_pdf_and_bank_answer()
+
+    if _matches_any(text, ("review code", "code", "patch")) and _matches_any(
+        text,
+        ("physically install", "install the patch on my server", "patch on my server", "on my server"),
+    ):
+        return _code_and_physical_install_answer()
+
+    if _matches_any(text, ("work in the background", "background")) and _matches_any(
+        text,
+        ("message me later", "later", "continuously", "continuous", "asynchronously", "monitor"),
+    ):
+        return _background_work_answer()
+
+    return None
+
+
 def get_capability_answer(prompt: str) -> Optional[str]:
     pl = _normalize(prompt)
 
@@ -539,6 +611,14 @@ def get_broad_chat_answer(prompt: str) -> Optional[str]:
 
     if _is_false_claim_prompt(pl):
         return _false_claim_answer()
+
+    mixed_boundary_answer = _mixed_capability_boundary_answer(pl)
+    if mixed_boundary_answer:
+        return mixed_boundary_answer
+
+    coercive_access_answer = _coercive_access_answer(pl)
+    if coercive_access_answer:
+        return coercive_access_answer
 
     if _wants_review_scope(pl):
         return _scope_answer()
