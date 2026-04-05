@@ -25,10 +25,13 @@ def respond(prompt: str, user_id: int | None = None) -> str:
         value = get_fact(decision.namespace, decision.key)
         return value if value is not None else "FACT_NOT_FOUND"
 
+    guided_broad_chat_answer = get_broad_chat_answer(prompt)
+
     if decision.route == "ops":
+        if guided_broad_chat_answer:
+            return guided_broad_chat_answer
         return unknown_ops_text(prompt)
 
-    guided_broad_chat_answer = get_broad_chat_answer(prompt)
     if guided_broad_chat_answer:
         return guided_broad_chat_answer
 
