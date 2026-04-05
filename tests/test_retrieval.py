@@ -51,7 +51,7 @@ def test_responder_passes_context_blocks_to_broad_chat(monkeypatch):
         "route_prompt",
         lambda prompt: RouteDecision(route="broad_chat", reason="test"),
     )
-    monkeypatch.setattr(responder, "get_capability_answer", lambda prompt: None)
+    monkeypatch.setattr(responder, "get_broad_chat_answer", lambda prompt: None)
     monkeypatch.setattr(responder, "build_grounding_context", lambda prompt: ["Authoritative facts:\n- system.bridge_canary = green"])
 
     seen = {}
