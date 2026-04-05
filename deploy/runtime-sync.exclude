@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 venv2026/
 downloads/
+reports/
 secrets/
 isla_v2/secrets/
 isla_v2/data/current-good-checksums.txt
@@ -16,3 +17,4 @@ isla_v2/data/watchdog/
 isla_v2/data/events/procedure_history.jsonl
 isla_v2/data/events/procedure_runs/
 isla_v2/data/procedures/locks/
+deploy/runtime-revision.env

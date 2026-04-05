@@ -28,23 +28,28 @@ The helper supports:
 - dry-run mode
 - optional bundle-before-deploy
 - real deploy mode
-- post-deploy `isla-v2-preflight` and `isla-check`
+- clean-source enforcement before deploy or verification
+- runtime revision marker writes to `/home/ai/ai-agents/deploy/runtime-revision.env`
+- post-sync restart of `isla-v2-bot.service`
+- post-deploy parity verification plus `isla-v2-preflight` and `isla-check`
 - explicit refusal when invoked outside `/home/ai/ai-agents-src`
 
 Parity verification helper:
 
 - Script: `/home/ai/ai-agents-src/deploy/verify-runtime-parity.sh`
 - Uses the same checked-in exclude file as deployment
+- Reports source commit, runtime revision marker, service binding, and service health
 - Prints `PARITY_PASS` or `PARITY_FAIL`
 
 ## Standard Workflow
 
 1. Make changes in source only.
-2. Run tests from source.
-3. Review the deployment diff with dry-run.
-4. Optionally create a bundle before deployment.
-5. Apply the sync into runtime.
-6. Let post-deploy checks confirm the runtime is still healthy.
+2. Commit the source tree so deploy can point at one exact revision.
+3. Run tests from source.
+4. Review the deployment diff with dry-run.
+5. Optionally create a bundle before deployment.
+6. Apply the sync into runtime.
+7. Let post-deploy parity and health checks confirm the live service is running that exact runtime.
 
 ## Exact Commands
 
@@ -58,8 +63,15 @@ deploy/sync-to-runtime.sh --dry-run
 Expected result:
 
 - prints source, runtime, exclude, and mode
+- prints the source commit/tree and current runtime revision marker if one exists
 - shows planned file changes only
-- ends with `SYNC_DRY_RUN_OK`
+- ends with `SYNC_DRY_RUN_OK: <commit>`
+
+If the source repo is dirty, dry-run stops immediately with:
+
+```text
+SYNC_FAIL: source git tree is dirty; commit or stash changes before deploying
+```
 
 ### Apply with bundle-before-deploy
 
@@ -73,13 +85,20 @@ Expected result:
 - prints source, runtime, exclude, and mode
 - creates a runtime bundle
 - syncs source files into `/home/ai/ai-agents`
+- writes `/home/ai/ai-agents/deploy/runtime-revision.env`
+- restarts `isla-v2-bot.service` only after sync and marker write succeed
+- waits for the service to return `active/running`
+- runs `deploy/verify-runtime-parity.sh`
 - runs:
   - `/home/ai/bin/isla-v2-preflight`
   - `/home/ai/bin/isla-check`
 - prints:
+  - `CHECK_OK: revision marker`
+  - `CHECK_OK: service active`
+  - `CHECK_OK: runtime parity`
   - `CHECK_OK: preflight`
   - `CHECK_OK: stack-check`
-- ends with `SYNC_APPLY_OK`
+- ends with `SYNC_APPLY_OK: <commit>`
 
 ### Apply without creating a new bundle
 
@@ -115,6 +134,7 @@ The checked-in exclude file keeps runtime-only state out of source deployments, 
 - `.pytest_cache`
 - `venv2026`
 - `downloads`
+- `reports`
 - top-level `secrets`
 - `isla_v2/secrets`
 - facts/notes DBs
@@ -123,6 +143,7 @@ The checked-in exclude file keeps runtime-only state out of source deployments, 
 - watchdog state
 - procedure run history and logs
 - procedure lock files
+- the runtime revision marker file
 
 ## Verification After Deploy
 
@@ -140,14 +161,26 @@ Expected pass result:
 source: /home/ai/ai-agents-src
 runtime: /home/ai/ai-agents
 exclude: /home/ai/ai-agents-src/deploy/runtime-sync.exclude
+revision_file: /home/ai/ai-agents/deploy/runtime-revision.env
+service: isla-v2-bot.service
 
-PARITY_PASS: source and runtime match for source-controlled files
+=== source revision ===
+source_commit: <commit>
+
+=== runtime revision ===
+runtime_commit: <commit>
+
+=== service target ===
+service_binding_match: yes
+service_state: active/running
+
+PARITY_PASS: source commit <commit> matches runtime revision and source-controlled files; service is active/running
 ```
 
 Expected fail result:
 
 ```text
-PARITY_FAIL: source and runtime differ for source-controlled files
+PARITY_FAIL: runtime parity verification failed
 ```
 
 If it fails, review the listed diff and determine whether:
@@ -155,6 +188,8 @@ If it fails, review the listed diff and determine whether:
 - runtime was hotfixed directly
 - source changes were not deployed yet
 - the exclude file needs explicit review
+- the service unit drifted away from `/home/ai/ai-agents`
+- the service is unhealthy and needs log review
 
 ### Runtime health
 
@@ -177,4 +212,4 @@ Healthy signals:
 - If you make an emergency hotfix in runtime, back-port it into source immediately.
 - Git rollback belongs in source.
 - Bundle/restore rollback remains the live deployment safety net.
-- Any failed bundle, rsync, preflight, or stack check exits non-zero and prints a `SYNC_FAIL:` summary.
+- Any dirty source tree, failed bundle, failed rsync, missing venv, bad service binding, failed restart, failed parity check, failed preflight, or failed stack check exits non-zero and prints a `SYNC_FAIL:` or `PARITY_FAIL:` summary.
