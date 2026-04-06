@@ -1,5 +1,6 @@
 import importlib.util
 import re
+import shlex
 from pathlib import Path
 
 from isla_v2.core.policies.capability_answers import get_capability_answer
@@ -95,16 +96,45 @@ def validate_plain_text_entry(entry: str) -> None:
 
 
 def validate_cli_entry(entry: str) -> None:
-    if entry.startswith("/home/ai/bin/"):
-        path = Path(entry.split()[0])
+    working_dir: Path | None = None
+    command = entry
+
+    if command.startswith("cd "):
+        assert " && " in command, f"malformed cd-prefixed CLI entry in docs: {entry}"
+        cd_part, command = command.split(" && ", 1)
+        cd_parts = shlex.split(cd_part)
+        assert len(cd_parts) == 2 and cd_parts[0] == "cd", f"malformed cd-prefixed CLI entry in docs: {entry}"
+        working_dir = Path(cd_parts[1])
+        assert working_dir.exists(), f"documented CLI working directory missing: {working_dir}"
+
+    parts = shlex.split(command)
+    assert parts, f"empty CLI entry in docs: {entry}"
+
+    if parts[0].startswith("/home/ai/bin/"):
+        path = Path(parts[0])
         assert path.exists(), f"documented CLI path missing: {path}"
         return
-    if entry.startswith("python -m "):
-        parts = entry.split()
-        assert len(parts) >= 3, f"malformed python -m entry in docs: {entry}"
+
+    if parts[0] == "python" and len(parts) >= 3 and parts[1] == "-m":
         module = parts[2]
         assert importlib.util.find_spec(module) is not None, f"documented Python module missing: {module}"
         return
+
+    if parts[0].endswith("/python"):
+        interpreter = Path(parts[0])
+        assert interpreter.exists(), f"documented Python interpreter missing: {interpreter}"
+        assert len(parts) >= 2, f"malformed Python script entry in docs: {entry}"
+        if parts[1] == "-m":
+            assert len(parts) >= 3, f"malformed Python module entry in docs: {entry}"
+            module = parts[2]
+            assert importlib.util.find_spec(module) is not None, f"documented Python module missing: {module}"
+            return
+
+        script = Path(parts[1])
+        script_path = script if script.is_absolute() else (working_dir or ROOT) / script
+        assert script_path.exists(), f"documented Python script missing: {script_path}"
+        return
+
     raise AssertionError(f"unsupported CLI entry validator: {entry}")
 
 
