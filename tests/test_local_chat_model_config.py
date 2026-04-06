@@ -46,6 +46,7 @@ def test_chat_uses_requested_model_without_changing_default(monkeypatch):
     assert events[0] == ("show", "gemma4:e4b")
     assert events[1][0] == "chat"
     assert events[1][1]["model"] == "gemma4:e4b"
+    assert events[1][1]["think"] is False
     assert events[1][1]["messages"][0]["role"] == "system"
     assert events[1][1]["messages"][-1]["content"] == "hello"
 
@@ -69,6 +70,22 @@ def test_chat_raises_clear_error_when_model_is_missing(monkeypatch):
         local_chat.chat("hello", model="gemma4:e4b")
 
     assert not chat_called
+
+
+def test_chat_raises_clear_error_when_model_returns_empty_content(monkeypatch):
+    local_chat = load_local_chat(monkeypatch)
+
+    def fake_show(model):
+        return {"model_info": {"name": model}}
+
+    def fake_chat(**kwargs):
+        return {"message": {"content": "   \n\t  "}}
+
+    monkeypatch.setattr(local_chat.ollama, "show", fake_show)
+    monkeypatch.setattr(local_chat.ollama, "chat", fake_chat)
+
+    with pytest.raises(RuntimeError, match=r"OLLAMA_EMPTY_CONTENT: gemma4:e4b"):
+        local_chat.chat("hello", model="gemma4:e4b")
 
 
 def test_model_validation_is_cached_for_repeated_calls(monkeypatch):

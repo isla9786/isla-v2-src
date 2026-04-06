@@ -135,6 +135,24 @@ def list_local_models(limit: int = 8) -> list[str]:
     return seen
 
 
+def _extract_chat_content(response: object, model: str) -> str:
+    message = getattr(response, "message", None)
+    if message is None and isinstance(response, dict):
+        message = response.get("message")
+
+    content = ""
+    if isinstance(message, dict):
+        content = str(message.get("content") or "")
+    elif message is not None:
+        content = str(getattr(message, "content", "") or "")
+
+    stripped = content.strip()
+    if stripped:
+        return stripped
+
+    raise RuntimeError(f"OLLAMA_EMPTY_CONTENT: {model} returned no usable message content")
+
+
 def chat(prompt: str, model: str = DEFAULT_MODEL, context_blocks: list[str] | None = None) -> str:
     model_snapshot = describe_broad_model(model)
     resolved_model = str(model_snapshot["model"])
@@ -171,9 +189,10 @@ def chat(prompt: str, model: str = DEFAULT_MODEL, context_blocks: list[str] | No
     resp = ollama.chat(
         model=resolved_model,
         messages=messages,
+        think=False,
         options={"temperature": 0.15},
     )
-    return resp["message"]["content"].strip()
+    return _extract_chat_content(resp, resolved_model)
 
 
 def validate_broad_chat(
