@@ -1,9 +1,15 @@
 # ISLA_V2 Gemma 4 Staged Test Path
 
 - Scope: low-risk local Gemma 4 trial path for the current ISLA_V2 repo and Ollama runtime
-- Repo path: `/home/ai/ai-agents`
+- Source repo: `/home/ai/ai-agents-src`
+- Runtime repo: `/home/ai/ai-agents`
 - Last validated date: `2026-04-04`
 - Source of truth: live repo behavior wins; this path is optional and does not change the production default model
+
+This is not a standard release workflow.
+
+- Normal releases still go through `cd /home/ai/ai-agents-src && /home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py`.
+- Do not treat manual runtime edits under `/home/ai/ai-agents` as a normal deployment method.
 
 ## Decision
 
@@ -86,7 +92,7 @@ Run these before changing anything:
 ```bash
 ollama list
 /home/ai/bin/isla-check
-cd /home/ai/ai-agents && source venv2026/bin/activate && pytest -q
+cd /home/ai/ai-agents-src && /home/ai/ai-agents/venv2026/bin/python -m pytest -q
 ```
 
 Expected result:
@@ -120,17 +126,15 @@ ollama pull gemma4:e2b
 Use the repo-owned broad-chat validation path first:
 
 ```bash
-cd /home/ai/ai-agents
-source venv2026/bin/activate
-python -m isla_v2.core.models.local_chat --validate --model gemma4:e4b
+cd /home/ai/ai-agents-src
+/home/ai/ai-agents/venv2026/bin/python -m isla_v2.core.models.local_chat --validate --model gemma4:e4b
 ```
 
 To validate the currently configured broad model instead, omit `--model`:
 
 ```bash
-cd /home/ai/ai-agents
-source venv2026/bin/activate
-python -m isla_v2.core.models.local_chat --validate
+cd /home/ai/ai-agents-src
+/home/ai/ai-agents/venv2026/bin/python -m isla_v2.core.models.local_chat --validate
 ```
 
 Expected success shape:
@@ -156,9 +160,8 @@ error: OLLAMA_MODEL_NOT_FOUND: gemma4:e4b. Pull it with: ollama pull gemma4:e4b
 You can also validate with a custom prompt:
 
 ```bash
-cd /home/ai/ai-agents
-source venv2026/bin/activate
-python -m isla_v2.core.models.local_chat --validate --model gemma4:e4b "Summarize the current ISLA_V2 stack in five short bullets."
+cd /home/ai/ai-agents-src
+/home/ai/ai-agents/venv2026/bin/python -m isla_v2.core.models.local_chat --validate --model gemma4:e4b "Summarize the current ISLA_V2 stack in five short bullets."
 ```
 
 This is the safest first proof because it:
@@ -169,45 +172,17 @@ This is the safest first proof because it:
 - does not change the gateway
 - does not change operator-facing defaults
 
-## Stage 3: Optional Bot-Only Trial
+## Stage 3: Exceptional-Only Live Runtime Trial
 
-Only do this if the CLI smoke test looks good.
+Any direct Gemma edit under `/home/ai/ai-agents` is exceptional-only and not part of the normal staged-test flow.
 
-Edit:
+If you absolutely need that live runtime procedure after the CLI smoke test, use [ISLA_V2 Exceptional Ops Only: Gemma Runtime Edit](/home/ai/ai-agents/docs/ISLA_V2_EXCEPTIONAL_OPS_GEMMA_RUNTIME_EDIT.md).
 
-- `/home/ai/ai-agents/isla_v2/secrets/isla_v2_bot.env`
-
-Add:
+Standard production changes still use:
 
 ```bash
-ISLA_V2_BROAD_MODEL=gemma4:e4b
-```
-
-Then restart only the bot:
-
-```bash
-systemctl --user restart isla-v2-bot.service
-systemctl --user --no-pager status isla-v2-bot.service
-/home/ai/bin/isla-v2-preflight
-```
-
-If the configured `ISLA_V2_BROAD_MODEL` tag is missing locally, both broad chat and preflight now fail clearly with:
-
-```text
-OLLAMA_MODEL_NOT_FOUND: <model>. Pull it with: ollama pull <model>
-```
-
-Safe operator checks after restart:
-
-- Telegram:
-  - `/status alert`
-  - `/ask summarize the current stack`
-  - a plain-text non-ops prompt
-- Local:
-
-```bash
-/home/ai/bin/isla-check
-cd /home/ai/ai-agents && source venv2026/bin/activate && python -m isla_v2.apps.watchdog.watchdog --show
+cd /home/ai/ai-agents-src
+/home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py
 ```
 
 ## What Not To Change Yet
@@ -229,22 +204,7 @@ Reason:
 
 ## Rollback
 
-If the bot-only Gemma 4 trial is not good enough, revert by removing or changing:
-
-```bash
-ISLA_V2_BROAD_MODEL=gemma4:e4b
-```
-
-in:
-
-- `/home/ai/ai-agents/isla_v2/secrets/isla_v2_bot.env`
-
-Then restart the bot:
-
-```bash
-systemctl --user restart isla-v2-bot.service
-/home/ai/bin/isla-v2-preflight
-```
+If you used the exceptional live runtime trial, follow the recovery steps in [ISLA_V2 Exceptional Ops Only: Gemma Runtime Edit](/home/ai/ai-agents/docs/ISLA_V2_EXCEPTIONAL_OPS_GEMMA_RUNTIME_EDIT.md).
 
 If you want to clean up the test model itself:
 
@@ -264,7 +224,7 @@ ollama rm gemma4:e4b
 Use Gemma 4 only as:
 
 - an optional local smoke-test model first
-- then an optional bot-only broad-chat trial if the smoke test is satisfactory
+- then only if absolutely necessary, an exceptional-only bot trial using [ISLA_V2 Exceptional Ops Only: Gemma Runtime Edit](/home/ai/ai-agents/docs/ISLA_V2_EXCEPTIONAL_OPS_GEMMA_RUNTIME_EDIT.md)
 
 Do not make it the production default until you have manually validated:
 

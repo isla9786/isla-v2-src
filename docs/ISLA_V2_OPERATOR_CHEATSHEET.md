@@ -1,9 +1,27 @@
 # ISLA_V2 Operator Cheatsheet
 
 - Scope: Daily operator quick reference for the current live ISLA_V2 stack
-- Repo path: `/home/ai/ai-agents`
+- Source repo: `/home/ai/ai-agents-src`
+- Runtime repo: `/home/ai/ai-agents`
 - Source of truth: [ISLA_V2 Operator Manual](/home/ai/ai-agents/docs/ISLA_V2_OPERATOR_MANUAL.md)
 - Rule: implementation and scripts win over stale help text
+
+## Release Gate Only
+
+Only supported release path:
+
+```bash
+cd /home/ai/ai-agents-src
+/home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py
+```
+
+Runtime safety policy:
+
+- Do not manually edit `/home/ai/ai-agents`.
+- Do not manually `git checkout`, `git reset`, `rsync`, `cp`, or patch the runtime repo during normal operations.
+- Make changes in the source repo, push `origin/main`, and release only via `scripts/release_gate.py`.
+- Manual runtime edits break source-to-runtime parity, make rollback less trustworthy, and bypass release safety checks.
+- Detached `HEAD` in the runtime repo is normal by design.
 
 ## Quickest Health Verification Flow
 
@@ -145,7 +163,7 @@ Rollback and packaging:
 - `/home/ai/bin/isla-v2-restore --restore latest`
 - `/home/ai/bin/isla-v2-restore --restore golden`
 - `/home/ai/bin/isla-v2-promote --show`
-- `/home/ai/bin/isla-v2-release "name" "note"`
+- `cd /home/ai/ai-agents-src && /home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py`
 
 Facts and procedures:
 

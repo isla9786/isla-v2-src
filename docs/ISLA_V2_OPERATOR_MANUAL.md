@@ -1,8 +1,9 @@
 # ISLA_V2 Operator Manual
 
 - Scope: Current live operator command surface, runbooks, safety model, memory model, procedures, and maintenance workflows for ISLA_V2
-- Repo path: `/home/ai/ai-agents`
-- Last validated date: `2026-04-04`
+- Source repo: `/home/ai/ai-agents-src`
+- Runtime repo: `/home/ai/ai-agents`
+- Last validated date: `2026-04-05`
 - Source of truth: live implementation and scripts win over stale help text, earlier design intent, or undocumented assumptions
 
 # 1. ISLA_V2 Operator Manual Overview
@@ -43,6 +44,31 @@ What it explicitly does not do today:
 - no scheduled procedure runner beyond the watchdog timer
 - no vector/Qdrant retrieval in the grounding path
 - no hard-enforced fact expiry; TTL is soft state only
+
+## Release And Runtime Repo Policy
+
+Normal operator release flow:
+
+```bash
+cd /home/ai/ai-agents-src
+/home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py
+```
+
+Required policy:
+
+- make changes in the source repo only
+- push source `main` to `origin/main`
+- release only via `scripts/release_gate.py`
+- do not manually edit files in `/home/ai/ai-agents`
+- do not manually `git checkout`, `git reset`, `rsync`, `cp`, or patch the runtime repo during normal operations
+- treat `/home/ai/ai-agents` as a deploy target, not a development workspace
+- expect detached `HEAD` in the runtime repo during normal operation
+
+Why this matters:
+
+- manual runtime edits break parity between source and runtime
+- manual runtime git changes make rollback less trustworthy
+- manual shortcuts bypass preflight, source tests, runtime tests, service checks, and automatic rollback
 
 # 2. Live Command Surface Inventory
 
@@ -174,7 +200,7 @@ These work in both `/ops ...` form and as the same plain-text message.
 | `/home/ai/bin/isla-check` | full stack health check |
 | `/home/ai/bin/isla-v2-bundle --create <name> "<note>"` | create rollback bundle |
 | `/home/ai/bin/isla-v2-restore --restore <target>` | restore bundle or golden |
-| `/home/ai/bin/isla-v2-release "<name>" "<note>"` | gated release + golden promote |
+| `cd /home/ai/ai-agents-src && /home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py` | only supported production release command |
 | `/home/ai/bin/isla-v2-snapshot` | write best-effort health snapshot artifacts |
 | `/home/ai/bin/isla-v2-doctor` | run golden show, preflight, and restore drill |
 | `/home/ai/bin/isla-v2-drill` | restore golden and verify health |
@@ -185,7 +211,7 @@ These work in both `/ops ...` form and as the same plain-text message.
 | `/home/ai/bin/isla-v2-watchdog-run` | run watchdog once and tail logs |
 | `/home/ai/bin/isla-v2-promote --show|--promote <bundle>` | show or set golden bundle |
 | `/home/ai/bin/isla-safe-change "<name>" "<note>"` | create protected bundle and print current status |
-| `/home/ai/bin/aiwork` | enter `/home/ai/ai-agents` with `venv2026` activated |
+| `/home/ai/bin/aiwork` | open an interactive shell in the runtime repo when read-only inspection is needed |
 
 # 3. Detailed Command Reference
 
@@ -310,7 +336,7 @@ Unless noted, every `/ops` command also works as the same plain-text message.
 
 ## Check whether ISLA_V2 is healthy
 
-- When to use: routine checks, after deploys, after restore, after a restart.
+- When to use: routine checks, after releases, after restore, after a restart.
 - Exact steps:
   - `/status alert` in Telegram
   - `/ops main health` in Telegram
@@ -470,6 +496,21 @@ Unless noted, every `/ops` command also works as the same plain-text message.
 - If it fails:
   - read the first failing section
   - fix source/compile/runtime issue before continuing
+
+## Run the release gate
+
+- When to use: every normal production release.
+- Exact steps:
+  - `cd /home/ai/ai-agents-src`
+  - `/home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py`
+- Expected result:
+  - `CHECK_OK` for preflight, source tests, runtime parity, runtime tests, and service health
+  - `RELEASE_GATE_OK: <commit>`
+- If it fails:
+  - stop at the first failing gate step
+  - fix the source, branch, push, or runtime health issue that the gate reports
+  - do not manually edit or manually sync `/home/ai/ai-agents`
+  - rerun the release gate after the failing condition is resolved
 
 ## Create a bundle
 
@@ -697,7 +738,7 @@ PY
 | `isla-check` | full stack health check | `/home/ai/bin/isla-check` | `[OK]` and `[INFO]` lines; `=== Done ===` | depends on `/home/ai/bin/isla-healthcheck.sh` |
 | `isla-v2-bundle` | create/read change bundles | `/home/ai/bin/isla-v2-bundle --create pre-change "Before gateway work"` | `BUNDLE_OK`, `README_OK`, `MANIFEST_OK` | may warn and skip privileged files if sudo copy is unavailable |
 | `isla-v2-restore` | restore a bundle or golden | `/home/ai/bin/isla-v2-restore --restore golden` | `PRE_RESTORE_SNAPSHOT_OK`, `RESTORE_OK` | restarts bot and watchdog timer |
-| `isla-v2-release` | gated release and golden promotion | `/home/ai/bin/isla-v2-release "ops-fix" "Verified ops patch"` | `RELEASE_OK: <bundle>` | mutates golden target; runs pytest and preflight |
+| `release_gate.py` | fail-closed source-to-runtime release gate | `cd /home/ai/ai-agents-src && /home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py` | `RELEASE_GATE_OK: <commit>` | only supported release path; do not replace with manual runtime edits |
 | `isla-v2-snapshot` | write best-effort health snapshot files | `/home/ai/bin/isla-v2-snapshot` | `SNAPSHOT_OK: <dir>` | snapshots what it can; individual capture failures do not abort |
 | `isla-v2-doctor` | run golden show, preflight, and drill | `/home/ai/bin/isla-v2-doctor` | `DOCTOR_PASS` or `DOCTOR_FAIL` | not read-only; it runs the restore drill |
 | `isla-v2-drill` | restore golden and verify health | `/home/ai/bin/isla-v2-drill` | `DRILL_PASS` or `DRILL_FAIL` | mutating restore test; may restart bot |
@@ -707,8 +748,8 @@ PY
 | `isla-v2-watchdog-logs` | recent watchdog logs | `/home/ai/bin/isla-v2-watchdog-logs` | last 50 lines | bounded output |
 | `isla-v2-watchdog-run` | start watchdog once and tail logs | `/home/ai/bin/isla-v2-watchdog-run` | service start plus recent logs | mutates watchdog state only |
 | `isla-v2-promote` | show or set golden bundle | `/home/ai/bin/isla-v2-promote --show` | `GOLDEN_BACKUP: ...` or related text | `--promote` mutates rollback anchor |
-| `isla-safe-change` | create protected bundle and print current state | `/home/ai/bin/isla-safe-change "pre-change" "Before test"` | bundle info + current status/watchdog/golden | helper used by release |
-| `aiwork` | enter repo with venv activated | `/home/ai/bin/aiwork` | interactive shell in `/home/ai/ai-agents` | shell convenience only |
+| `isla-safe-change` | create protected bundle and print current state | `/home/ai/bin/isla-safe-change "pre-change" "Before test"` | bundle info + current status/watchdog/golden | not the supported production release command |
+| `aiwork` | enter repo with venv activated | `/home/ai/bin/aiwork` | interactive shell in `/home/ai/ai-agents` | use for inspection only; do not treat runtime as a development workspace |
 
 ## Useful module CLIs
 
@@ -897,6 +938,11 @@ PY
   - if still degraded: `/ops recover all`
   - then `/ops confirm recover all`
 
+- Release flow:
+  - `cd /home/ai/ai-agents-src`
+  - `/home/ai/ai-agents/venv2026/bin/python scripts/release_gate.py`
+  - do not manually edit or manually sync `/home/ai/ai-agents`
+
 - Rollback drill flow:
   - `/ops golden status`
   - `/ops rollback golden`
@@ -946,7 +992,7 @@ Files used as primary sources:
 - [isla-v2-preflight](/home/ai/bin/isla-v2-preflight)
 - [isla-v2-bundle](/home/ai/bin/isla-v2-bundle)
 - [isla-v2-restore](/home/ai/bin/isla-v2-restore)
-- [isla-v2-release](/home/ai/bin/isla-v2-release)
+- [release_gate.py](/home/ai/ai-agents-src/scripts/release_gate.py)
 - [isla-check](/home/ai/bin/isla-check)
 - [isla-v2-doctor](/home/ai/bin/isla-v2-doctor)
 - [isla-v2-snapshot](/home/ai/bin/isla-v2-snapshot)
